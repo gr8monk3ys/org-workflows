@@ -62,6 +62,20 @@ jobs:
             echo "No supported release strategy detected; skipping."
           fi
 
+      # Prefer the caller's `release-token` PAT; fall back to GITHUB_TOKEN so a
+      # repo that has not set the secret still cuts releases.
+      #
+      # GitHub does not trigger workflows for events raised by GITHUB_TOKEN.
+      # That anti-recursion rule is why every release PR this action opened
+      # sat permanently BLOCKED: the repo's required checks never ran on it,
+      # so they could never report, so the PR could never merge, however
+      # green the branch was. `skills#44` is the worked example -- CodeQL
+      # reported (it comes from default setup, outside the rule) while
+      # "Test (Node 20, ubuntu-latest)" and "Validate Plugin" never fired at
+      # all. Nothing about it looks like a permissions problem from the PR
+      # page; the checks are simply absent.
+      #
+      # A PAT makes the PR come from a real user, so the workflows trigger.
       - name: Run Release Please
         if: steps.detect.outputs.supported == 'true'
         uses: googleapis/release-please-action@16a9c90856f42705d54a6fda1823352bdc62cf38
