@@ -1,9 +1,30 @@
 name: reusable-gitleaks
 
+# Secret scan.
+#
+#   pull_request            -> scans only the commits the PR adds
+#                              (base.sha..head.sha). Fixture keys that have
+#                              sat in history for years are not the PR's
+#                              problem and should not fail it.
+#   schedule / dispatch /   -> scans the full history, as before.
+#   anything else
+#
+# The repo's own .gitleaks.toml and .gitleaksignore at the root are picked
+# up automatically by the gitleaks binary (no --config needed).
+#
+# Runs the gitleaks release binary directly rather than gitleaks-action so
+# the scanned range is explicit in this file, not inside the action's JS.
+
 on:
   workflow_call:
 
 permissions: read-all
+
+env:
+  GITLEAKS_VERSION: 8.30.1
+  # sha256 of gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz, from the
+  # release's gitleaks_<version>_checksums.txt. Bump both together.
+  GITLEAKS_SHA256: 551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb
 
 jobs:
   gitleaks:
@@ -12,10 +33,38 @@ jobs:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
         with:
+          # PR: check out the branch head, not the synthetic merge commit,
+          # so base.sha..head.sha names exactly the commits the PR adds.
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || '' }}
+          # Full clone in both modes: base.sha must be present locally for
+          # the range to resolve. The cost being cut here is the scan, not
+          # the fetch.
           fetch-depth: 0
 
-      - name: Run gitleaks
-        uses: gitleaks/gitleaks-action@ff98106e4c7b2bc287b24eaf42907196329070c7
+      - name: Install gitleaks
+        run: |
+          set -euo pipefail
+          url="https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          curl -sSfL "$url" -o /tmp/gitleaks.tgz
+          echo "${GITLEAKS_SHA256}  /tmp/gitleaks.tgz" | sha256sum --check --strict
+          tar -xzf /tmp/gitleaks.tgz -C /tmp gitleaks
+          install -m 0755 /tmp/gitleaks /usr/local/bin/gitleaks
+          gitleaks version
+
+      - name: Scan PR commits only
+        if: github.event_name == 'pull_request'
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GITLEAKS_ENABLE_COMMENTS: false
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          echo "Scanning ${BASE_SHA}..${HEAD_SHA} ($(git rev-list --count "${BASE_SHA}..${HEAD_SHA}") commits)"
+          gitleaks git --no-banner --redact --verbose --exit-code 1 \
+            --log-opts="${BASE_SHA}..${HEAD_SHA}" .
+
+      - name: Scan full history
+        if: github.event_name != 'pull_request'
+        run: |
+          set -euo pipefail
+          echo "Scanning full history ($(git rev-list --count HEAD) commits)"
+          gitleaks git --no-banner --redact --verbose --exit-code 1 .

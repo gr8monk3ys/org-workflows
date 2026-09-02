@@ -19,7 +19,7 @@ account and the org.
 |---|---|---|
 | `reusable-ci-tests-minimum.yml` | Detects the stack from the files present (Python / Node / Go) and runs its test command. Minimum viable CI for repos with no bespoke pipeline. | — |
 | `reusable-codeql.yml` | CodeQL analysis with SARIF upload. | `languages` (default `python,javascript-typescript`), `upload` (`always` \| `failure-only` \| `never`) |
-| `reusable-gitleaks.yml` | Secret scan of the full history. | — |
+| `reusable-gitleaks.yml` | Secret scan. On `pull_request` scans only the commits the PR adds (`base.sha..head.sha`); on `schedule` / `workflow_dispatch` scans the full history. Honours the repo's `.gitleaks.toml` / `.gitleaksignore`. Pre-commit counterpart: [`docs/pre-commit-gitleaks.md`](docs/pre-commit-gitleaks.md). | — |
 | `reusable-trufflehog.yml` | Verified-secret scan. | — |
 | `reusable-osv.yml` | OSV dependency-vulnerability scan. | — |
 | `reusable-trivy.yml` | Trivy filesystem scan. | — |
