@@ -2,6 +2,28 @@ name: reusable-release-please
 
 on:
   workflow_call:
+    inputs:
+      bump-minor-pre-major:
+        description: >
+          On a repo still below 1.0.0, treat a breaking change as a minor bump
+          (0.1.2 -> 0.2.0) instead of a major one (-> 1.0.0). Has no effect at
+          all once a repo is past 1.0.0, so it only changes the case where the
+          jump is a surprise. Defaults on: a breaking change in a 0.x repo
+          almost never means "this is now stable".
+        type: boolean
+        required: false
+        default: true
+    secrets:
+      release-token:
+        description: >
+          Optional PAT used to push the release branch and open its PR. Without
+          it the branch is pushed with GITHUB_TOKEN, and GitHub deliberately
+          does not start workflows on those pushes, so `on: pull_request` never
+          fires. In a repo whose default branch requires status checks the
+          release PR then sits BLOCKED with no checks at all -- absent, not
+          failing -- and cannot be merged. Closing and reopening the PR by hand
+          is the workaround; passing a PAT here is the fix.
+        required: false
 
 jobs:
   release-please:
@@ -44,8 +66,9 @@ jobs:
         if: steps.detect.outputs.supported == 'true'
         uses: googleapis/release-please-action@16a9c90856f42705d54a6fda1823352bdc62cf38
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ secrets.release-token || secrets.GITHUB_TOKEN }}
           release-type: ${{ steps.detect.outputs.release_type }}
+          bump-minor-pre-major: ${{ inputs.bump-minor-pre-major }}
 
       - name: Skip release
         if: steps.detect.outputs.supported != 'true'
