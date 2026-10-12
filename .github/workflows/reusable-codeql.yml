@@ -35,6 +35,43 @@ jobs:
         uses: github/codeql-action/autobuild@45580472a5bb82c4681c4ac726cfdb60060c2ee1
 
       - name: Analyze
+        id: analyze
         uses: github/codeql-action/analyze@45580472a5bb82c4681c4ac726cfdb60060c2ee1
         with:
           upload: ${{ inputs.upload }}
+
+      # Code scanning cannot be enabled on a private personal-account repo, so
+      # those callers pass `upload: never`. Without the two steps below the
+      # findings would then exist nowhere: a green run would show only that the
+      # queries ran. Keep the SARIF as a run artifact and put the count in the
+      # job summary.
+      - name: Summarize findings
+        if: inputs.upload != 'always'
+        env:
+          SARIF_DIR: ${{ steps.analyze.outputs.sarif-output }}
+          UPLOAD_MODE: ${{ inputs.upload }}
+        run: |
+          set -euo pipefail
+          total=0
+          for f in "${SARIF_DIR}"/*.sarif; do
+            [ -e "$f" ] || continue
+            n=$(jq '[.runs[].results | length] | add // 0' "$f")
+            echo "$(basename "$f"): ${n} finding(s)"
+            total=$((total + n))
+          done
+          {
+            echo "### CodeQL: ${total} finding(s)"
+            echo "SARIF was not uploaded to code scanning (upload: ${UPLOAD_MODE}). Download the codeql-sarif artifact from this run for details."
+          } >> "$GITHUB_STEP_SUMMARY"
+          if [ "$total" -gt 0 ]; then
+            echo "::warning title=CodeQL findings::${total} finding(s). See the codeql-sarif artifact."
+          fi
+
+      - name: Keep SARIF as an artifact
+        if: inputs.upload != 'always'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: codeql-sarif
+          path: ${{ steps.analyze.outputs.sarif-output }}/*.sarif
+          if-no-files-found: error
+          retention-days: 30
