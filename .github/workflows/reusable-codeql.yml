@@ -4,10 +4,14 @@ on:
   workflow_call:
     inputs:
       languages:
-        description: "Comma-separated CodeQL languages to analyze"
+        description: >-
+          Comma-separated CodeQL languages to analyze. Leave empty (the default)
+          or pass "auto" to detect them from the files tracked at the scanned
+          ref: python if any *.py, javascript-typescript if any JS/TS source.
+          Anything else (go, java-kotlin, c-cpp, ...) must be passed explicitly.
         type: string
         required: false
-        default: "python,javascript-typescript"
+        default: ""
       upload:
         description: "Upload SARIF behavior: always | failure-only | never"
         type: string
@@ -20,7 +24,49 @@ permissions:
   security-events: write
 
 jobs:
+  # The old default was a fixed "python,javascript-typescript", and CodeQL
+  # fails the whole run when a requested language has no source files. Any
+  # caller without Python (or without JS/TS) crashed unless it overrode
+  # `languages`. Detect instead, from the checked-out tree so a pull request
+  # is judged by its own files rather than the default branch's.
+  detect:
+    runs-on: ubuntu-latest
+    outputs:
+      languages: ${{ steps.pick.outputs.languages }}
+    steps:
+      - name: Checkout
+        if: ${{ inputs.languages == '' || inputs.languages == 'auto' }}
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+
+      - name: Pick languages
+        id: pick
+        env:
+          REQUESTED: ${{ inputs.languages }}
+        run: |
+          set -euo pipefail
+          if [ -n "$REQUESTED" ] && [ "$REQUESTED" != "auto" ]; then
+            # Explicit list: pass through untouched (backward compatible).
+            langs="$REQUESTED"
+          else
+            found=()
+            if git ls-files -- '*.py' '*.pyi' | grep -q .; then
+              found+=(python)
+            fi
+            if git ls-files -- '*.js' '*.jsx' '*.mjs' '*.cjs' \
+                 '*.ts' '*.tsx' '*.mts' '*.cts' '*.vue' '*.svelte' | grep -q .; then
+              found+=(javascript-typescript)
+            fi
+            langs=$(IFS=,; echo "${found[*]:-}")
+            if [ -z "$langs" ]; then
+              echo "::notice::No Python or JavaScript/TypeScript sources found; skipping CodeQL. Pass 'languages:' to scan anything else."
+            fi
+          fi
+          echo "CodeQL languages: ${langs:-<none>}"
+          echo "languages=$langs" >> "$GITHUB_OUTPUT"
+
   codeql:
+    needs: detect
+    if: ${{ needs.detect.outputs.languages != '' }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -29,7 +75,7 @@ jobs:
       - name: Initialize CodeQL
         uses: github/codeql-action/init@45580472a5bb82c4681c4ac726cfdb60060c2ee1
         with:
-          languages: ${{ inputs.languages }}
+          languages: ${{ needs.detect.outputs.languages }}
 
       - name: Autobuild
         uses: github/codeql-action/autobuild@45580472a5bb82c4681c4ac726cfdb60060c2ee1
