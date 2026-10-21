@@ -18,7 +18,7 @@ account and the org.
 | Workflow | What it does | Inputs |
 |---|---|---|
 | `reusable-ci-tests-minimum.yml` | Detects the stack from the files present (Python / Node / Go) and runs its test command. Minimum viable CI for repos with no bespoke pipeline. | — |
-| `reusable-codeql.yml` | CodeQL analysis with SARIF upload. With `upload` other than `always` (private repos, where code scanning is unavailable) the SARIF is kept as a `codeql-sarif` run artifact and the finding count goes in the job summary. | `languages` (default `python,javascript-typescript`), `upload` (`always` \| `failure-only` \| `never`) |
+| `reusable-codeql.yml` | CodeQL analysis with SARIF upload. With `upload` other than `always` (private repos, where code scanning is unavailable) the SARIF is kept as a `codeql-sarif` run artifact and the finding count goes in the job summary. | `languages` (default: auto-detect `python` / `javascript-typescript` from tracked files; skips cleanly if neither is present; pass a list explicitly for anything else), `upload` (`always` \| `failure-only` \| `never`) |
 | `reusable-gitleaks.yml` | Secret scan. On `pull_request` scans only the commits the PR adds (`base.sha..head.sha`); on `schedule` / `workflow_dispatch` scans the full history. Honours the repo's `.gitleaks.toml` / `.gitleaksignore`. Pre-commit counterpart: [`docs/pre-commit-gitleaks.md`](docs/pre-commit-gitleaks.md). | — |
 | `reusable-trufflehog.yml` | Verified-secret scan. | — |
 | `reusable-osv.yml` | OSV dependency-vulnerability scan. | — |
