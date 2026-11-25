@@ -10,6 +10,8 @@ on:
           all once a repo is past 1.0.0, so it only changes the case where the
           jump is a surprise. Defaults on: a breaking change in a 0.x repo
           almost never means "this is now stable".
+          Ignored when the repo has a release-please-config.json; set
+          "bump-minor-pre-major" there instead.
         type: boolean
         required: false
         default: true
@@ -42,6 +44,20 @@ jobs:
         run: |
           set -euo pipefail
           strategy=""
+
+          # A repo that ships release-please-config.json (plus
+          # .release-please-manifest.json) runs in manifest mode: release_type
+          # stays empty, so the action reads the repo's own config instead of
+          # this guess. That is the only way to use `extra-files`, which a repo
+          # needs when its version lives in a second file too (an extension's
+          # manifest.json, a plugin's plugin.json). Without it the release PR
+          # bumps package.json alone and that repo's own version check fails.
+          if [ -f release-please-config.json ]; then
+            echo "supported=true" >> "$GITHUB_OUTPUT"
+            echo "release_type=" >> "$GITHUB_OUTPUT"
+            echo "Using release-please-config.json (manifest mode)"
+            exit 0
+          fi
 
           if [ -f package.json ]; then
             strategy="node"
